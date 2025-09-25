@@ -22,7 +22,7 @@ pip install jq
 Run a single ETL spec against a source and destination:
 
 ```bash
-python main.py --etl test/examples/strings/etl.json \
+python jtl.py --etl test/examples/strings/etl.json \
   --src test/examples/strings/src.json \
   --dst test/examples/strings/dst.json \
   --stdout
@@ -38,7 +38,7 @@ Flags:
 Chain multiple ETLs with context precedence:
 
 ```bash
-python main.py --meta test/meta-examples/inline_chain/meta.json --stdout
+python jtl.py --meta test/meta-examples/inline_chain/meta.json --stdout
 ```
 
 Context precedence per step:
@@ -63,7 +63,7 @@ These examples are taken directly from this repository’s tests so you can repr
 
 Run:
 ```bash
-python main.py --etl test/examples/strings/etl.json \
+python jtl.py --etl test/examples/strings/etl.json \
   --src test/examples/strings/src.json \
   --dst test/examples/strings/dst.json \
   --stdout
@@ -82,7 +82,7 @@ Expected output:
 
 Run:
 ```bash
-python main.py --etl test/examples/inline_static/etl.json \
+python jtl.py --etl test/examples/inline_static/etl.json \
   --src test/examples/inline_static/src.json \
   --dst test/examples/inline_static/dst.json \
   --stdout
@@ -107,7 +107,7 @@ Output:
 
 Run (using the delimiter in `options.json` is demonstrated in meta tests; for single ETL pass via CLI):
 ```bash
-python main.py --etl test/examples/delimiter_strings/etl.json \
+python jtl.py --etl test/examples/delimiter_strings/etl.json \
   --src test/examples/delimiter_strings/src.json \
   --dst test/examples/delimiter_strings/dst.json \
   --delimiter " | " \
@@ -139,7 +139,7 @@ Output:
 
 Run:
 ```bash
-python main.py --meta test/meta-examples/inline_chain/meta.json --stdout
+python jtl.py --meta test/meta-examples/inline_chain/meta.json --stdout
 ```
 
 Output:
@@ -161,7 +161,7 @@ Output:
 
 Run:
 ```bash
-python main.py --meta test/meta-examples/precedence_override/meta.json --stdout
+python jtl.py --meta test/meta-examples/precedence_override/meta.json --stdout
 ```
 
 Output:
@@ -263,9 +263,9 @@ Tip: when you need to aggregate values (e.g., count or summarize per resource), 
 3. Run JTL:
    ```bash
    # Single ETL
-   python main.py --etl path/to/etl.json --src path/to/src.json --dst path/to/dst.json --stdout
+   python jtl.py --etl path/to/etl.json --src path/to/src.json --dst path/to/dst.json --stdout
    # Meta chain
-   python main.py --meta path/to/meta.json --stdout
+   python jtl.py --meta path/to/meta.json --stdout
    ```
 4. Add new ETLs as folders under `test/examples/` or `test/meta-examples/` to version and regression‑test them.
 

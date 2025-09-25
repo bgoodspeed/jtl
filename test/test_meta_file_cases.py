@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-MAIN_SCRIPT = os.path.join(PROJECT_ROOT, "main.py")
+MAIN_SCRIPT = os.path.join(PROJECT_ROOT, "jtl.py")
 META_DIR = os.path.join(os.path.dirname(__file__), "meta-examples")
 
 def _list_case_dirs():

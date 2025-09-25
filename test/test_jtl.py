@@ -1,6 +1,6 @@
 import unittest
 
-from main import run_etl, parse_jq_path
+from jtl import run_etl, parse_jq_path
 
 
 
