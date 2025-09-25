@@ -298,7 +298,7 @@ def main():
     mux.add_argument("--meta", help="Meta-ETL spec JSON file (chain multiple ETLs)")
 
     ap.add_argument("--src", help="Source JSON file (required for --etl)")
-    ap.add_argument("--dst", help="Destination/seed JSON file (required for --etl; created as {} if missing)")
+    ap.add_argument("--dst", help="Destination/seed JSON file (created as {} if missing)")
     ap.add_argument("--out", default="-", help="Output file (default: stdout). Use '-' for stdout explicitly.")
     ap.add_argument("--stdout", action="store_true",
                     help="Force writing output to stdout (overrides --out)")
@@ -323,8 +323,8 @@ def main():
         return
 
     # Single ETL mode
-    if not (args.etl and args.src and args.dst):
-        ap.error("for single ETL mode, the following are required: --etl, --src, --dst")
+    if not (args.etl and args.src ):
+        ap.error("for single ETL mode, the following are required: --etl, --src")
 
     mappings, etl_ctx, prelude = load_etl_file(args.etl)
 
