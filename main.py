@@ -1,49 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-"""
-JSON→JSON ETL using jq expressions for source extraction and simple jq-like
-paths for destination updates.
-
-Spec format (JSON array):
-[
-  {"src": ".users[] | select(.active) | .email", "dst": ".report.activeEmails", "mode": "upsert"},
-  {"src": ".version", "dst": ".metadata.version", "mode": "replace"}
-]
-
-Modes:
-- upsert (default):
-    * string targets: append using delimiter when already a string
-    * array targets: extend with src arrays, append scalars
-    * object targets: deep-merge
-    * other scalars: last write wins
-    * non-existent targets are created
-    * multiple src results are applied one-by-one
-- replace:
-    * if src yields 0 results: sets null
-    * if src yields 1 result: sets that value
-    * if src yields >1 result: sets array of results
-    * overwrites any prior value at the destination
-
-Destination path syntax (subset of jq lvalue paths):
-  .foo.bar[0].baz
-  .foo["key with spaces"]
-  .foo['quoted']
-No filters/selects in dst — it must be a concrete path.
-"""
-
 import argparse
 import json
 import os
 import re
 import sys
 from copy import deepcopy
-import jq
-import unittest
 
+import jq
 
 # -------------------------
-# Path parsing & utilities
+# JQ path parsing (concrete lvalue paths only)
 # -------------------------
 
 _PATH_TOKEN_RE = re.compile(
@@ -59,11 +26,9 @@ _PATH_TOKEN_RE = re.compile(
 )
 
 def _unescape(s: str) -> str:
-    # interpret common escapes like \" \\ \n \t in quoted bracket notation
     return bytes(s, "utf-8").decode("unicode_escape")
 
 def parse_jq_path(path: str):
-    """Parse a limited jq-style path into a list of segments (str keys or int indices)."""
     if not path or path[0] != '.':
         raise ValueError(f"Destination path must start with '.': {path}")
     i = 0
@@ -71,10 +36,8 @@ def parse_jq_path(path: str):
     while i < len(path):
         m = _PATH_TOKEN_RE.match(path, i)
         if not m:
-            if i == 0:
-                # allow bare '.' (root)
-                if path == '.':
-                    return []
+            if i == 0 and path == '.':
+                return []
             raise ValueError(f"Unsupported or non-concrete dst path near: '{path[i:]}' (full: {path})")
         name, idx, dq, sq = m.groups()
         if name is not None:
@@ -85,84 +48,17 @@ def parse_jq_path(path: str):
             segs.append(_unescape(dq))
         elif sq is not None:
             segs.append(_unescape(sq))
-        else:
-            raise AssertionError("Unexpected path parse state")
         i = m.end()
     return segs
 
-def _ensure_parent(container, path_segments):
-    """Ensure parent objects/arrays exist up to the last segment. Returns (parent, last_seg)."""
-    if not path_segments:
-        return None, None
-    cur = container
-    for j, seg in enumerate(path_segments[:-1]):
-        nxt = path_segments[j+1] if j+1 < len(path_segments) else None
-        if isinstance(seg, int):
-            # ensure list
-            if not isinstance(cur, list):
-                # create list if absent or wrong type
-                # replace with a list in its parent context is handled by caller
-                raise TypeError(f"Encountered non-list while navigating index [{seg}]")
-            # grow list as needed
-            while len(cur) <= seg:
-                cur.append(None)
-            if cur[seg] is None:
-                # decide next container type by next segment
-                cur[seg] = [] if isinstance(nxt, int) else {}
-            cur = cur[seg]
-        else:
-            # ensure dict
-            if not isinstance(cur, dict):
-                raise TypeError(f"Encountered non-object while navigating field .{seg}")
-            if seg not in cur or cur[seg] is None:
-                cur[seg] = {} if not isinstance(nxt, int) else []
-            cur = cur[seg]
-    return cur, path_segments[-1]
-
-def _get_ref(container, path_segments, create_missing: bool):
-    """Get (parent, last_seg, exists_flag). Create parents if requested."""
-    if not path_segments:
-        return None, None, True  # root
-    # We need to create parents if asked; else just traverse
-    cur = container
-    # Traversal without creation to detect missing
-    try:
-        for j, seg in enumerate(path_segments[:-1]):
-            if isinstance(seg, int):
-                if not isinstance(cur, list) or seg >= len(cur):
-                    if create_missing:
-                        # create parents from here
-                        parent, last = _ensure_parent(container, path_segments)
-                        return parent, last, False
-                    return None, None, False
-                cur = cur[seg]
-            else:
-                if not isinstance(cur, dict) or seg not in cur:
-                    if create_missing:
-                        parent, last = _ensure_parent(container, path_segments)
-                        return parent, last, False
-                    return None, None, False
-                cur = cur[seg]
-        # Now have parent; determine if leaf exists
-        last = path_segments[-1]
-        exists = False
-        if isinstance(last, int):
-            if isinstance(cur, list) and last < len(cur) and cur[last] is not None:
-                exists = True
-        else:
-            if isinstance(cur, dict) and last in cur:
-                exists = True
-        return cur, last, exists
-    except TypeError:
-        if create_missing:
-            parent, last = _ensure_parent(container, path_segments)
-            return parent, last, False
-        return None, None, False
+# -------------------------
+# JSON helpers
+# -------------------------
 
 def deep_merge(dst, src):
-    """Deep-merge src into dst (dicts only). Returns merged object (in place on dst)."""
+    """Deep-merge src into dst (dicts only). Returns merged in place on dicts; otherwise src."""
     if not isinstance(dst, dict) or not isinstance(src, dict):
-        return src
+        return deepcopy(src)
     for k, v in src.items():
         if k in dst and isinstance(dst[k], dict) and isinstance(v, dict):
             deep_merge(dst[k], v)
@@ -170,18 +66,7 @@ def deep_merge(dst, src):
             dst[k] = deepcopy(v)
     return dst
 
-def _append_to_array(existing, new_item):
-    if not isinstance(existing, list):
-        # convert scalars to 1-element list
-        return [existing, new_item] if existing is not None else [new_item]
-    if isinstance(new_item, list):
-        existing.extend(new_item)
-    else:
-        existing.append(new_item)
-    return existing
-
 def _upsert_value(existing, new_value, delimiter):
-    """Type-aware upsert semantics."""
     # strings
     if isinstance(existing, str) and isinstance(new_value, str):
         if existing == "":
@@ -198,27 +83,45 @@ def _upsert_value(existing, new_value, delimiter):
     if isinstance(existing, dict) and isinstance(new_value, dict):
         deep_merge(existing, new_value)
         return existing
-    # if existing is None -> simply set
+    # if existing is None -> set
     if existing is None:
         return deepcopy(new_value)
-    # mixed or scalar types -> last write wins
+    # mixed/scalars: last write wins
     return deepcopy(new_value)
 
-def set_path_value(root, path_segments, value, mode, delimiter):
-    """Set or upsert value at dst path."""
+def _ensure_parent(container, path_segments):
     if not path_segments:
-        # root assignment
+        return None, None
+    cur = container
+    for j, seg in enumerate(path_segments[:-1]):
+        nxt = path_segments[j+1] if j+1 < len(path_segments) else None
+        if isinstance(seg, int):
+            if not isinstance(cur, list):
+                raise TypeError(f"Encountered non-list while navigating index [{seg}]")
+            while len(cur) <= seg:
+                cur.append(None)
+            if cur[seg] is None:
+                cur[seg] = [] if isinstance(nxt, int) else {}
+            cur = cur[seg]
+        else:
+            if not isinstance(cur, dict):
+                raise TypeError(f"Encountered non-object while navigating field .{seg}")
+            if seg not in cur or cur[seg] is None:
+                cur[seg] = {} if not isinstance(nxt, int) else []
+            cur = cur[seg]
+    return cur, path_segments[-1]
+
+def set_path_value(root, path_segments, value, mode, delimiter):
+    if not path_segments:
         if mode == "replace":
             return deepcopy(value)
         else:
             return _upsert_value(root, value, delimiter)
 
-    # Ensure parents exist
-    parent, last, exists = _get_ref(root, path_segments, create_missing=True)
+    parent, last = _ensure_parent(root, path_segments)
     if isinstance(last, int):
         if not isinstance(parent, list):
             raise TypeError(f"Target parent is not a list for index [{last}]")
-        # grow if needed
         while len(parent) <= last:
             parent.append(None)
         if mode == "replace":
@@ -235,21 +138,14 @@ def set_path_value(root, path_segments, value, mode, delimiter):
     return root
 
 # -------------------------
-# ETL processing
+# ETL core
 # -------------------------
 
-
-def evaluate_src(expr: str, src_obj, ctx_obj):
-    """
-    Evaluate a jq expression against src_obj with $ctx available,
-    without relying on .with_args().
-    """
-    # Inline ctx as a jq binding:
-    #   (<ctx_json>) as $ctx | (<expr>)
+def evaluate_src(expr, src_obj, ctx_obj):
+    """Evaluate jq expression against src_obj with $ctx bound (portable: no with_args)."""
     ctx_json = json.dumps(ctx_obj, ensure_ascii=False)
     wrapped = f"({ctx_json}) as $ctx | ({expr})"
     prog = jq.compile(wrapped)
-    # Keep using the API you already have (ProgramWithInput -> .all())
     return list(prog.input(src_obj).all())
 
 def apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx):
@@ -259,8 +155,8 @@ def apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx):
     if mode not in ("upsert", "replace"):
         raise ValueError(f"Unsupported mode: {mode}")
 
-    # <-- ctx used here
     results = evaluate_src(src_expr, src_obj, ctx)
+    segs = parse_jq_path(dst_path)
 
     if mode == "replace":
         if len(results) == 0:
@@ -269,54 +165,35 @@ def apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx):
             value = results[0]
         else:
             value = results
-        segs = parse_jq_path(dst_path)
         set_path_value(dst_obj, segs, value, mode="replace", delimiter=delimiter)
         return
 
-    segs = parse_jq_path(dst_path)
+    # upsert per item
     for val in results:
         set_path_value(dst_obj, segs, val, mode="upsert", delimiter=delimiter)
 
-def run_etl(etl_spec, src_obj, dst_obj, delimiter, ctx):
-    for mapping in etl_spec:
+def run_etl(mappings, src_obj, dst_obj, delimiter, ctx):
+    for mapping in mappings:
         if "src" not in mapping or "dst" not in mapping:
             raise ValueError("Each mapping must include 'src' and 'dst'")
         apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx)
     return dst_obj
 
 # -------------------------
-# CLI
+# ETL spec loading (supports array/object + inline ctx)
 # -------------------------
 
-def main():
-    ap = argparse.ArgumentParser(description="JSON→JSON ETL using jq and jq-like dst paths")
-    ap.add_argument("--etl", required=False, help="ETL spec JSON file (array of mappings)")
-    ap.add_argument("--src", required=False, help="Source JSON file")
-    ap.add_argument("--dst", required=False, help="Destination (seed) JSON file")
-    ap.add_argument("--out", default="-", help="Output file (default: stdout)")
-    ap.add_argument("--delimiter", default="\\n", help="Delimiter used when appending strings (default: \\n)")
-    ap.add_argument("--run-tests", action="store_true", help="Run unit tests and exit")
-    args = ap.parse_args()
-
-
-    if not (args.etl and args.src and args.dst):
-        ap.error("the following arguments are required: --etl, --src, --dst (or use --run-tests)")
-
-    # Interpret escaped delimiter (e.g., "\n")
-    delimiter = bytes(args.delimiter, "utf-8").decode("unicode_escape")
-
-    with open(args.etl, "r", encoding="utf-8") as f:
+def load_etl_file(path):
+    """Return (mappings:list, ctx:dict). Supports array-form with trailing {'ctx':{}} or object-form."""
+    with open(path, "r", encoding="utf-8") as f:
         raw = json.load(f)
 
-    # Support either array form (mappings with optional trailing { "ctx": {...} })
-    # or object form { "mappings": [...], "ctx": {...} }.
+    mappings, ctx = [], {}
     if isinstance(raw, list):
-        ctx = {}
-        mappings = []
         for item in raw:
-            if isinstance(item, dict) and "ctx" in item:
+            if isinstance(item, dict) and "ctx" in item and len(item) == 1:
                 if item["ctx"]:
-                    ctx.update(item["ctx"])
+                    deep_merge(ctx, item["ctx"])
             else:
                 mappings.append(item)
     elif isinstance(raw, dict):
@@ -325,17 +202,131 @@ def main():
     else:
         raise ValueError("ETL spec must be a JSON array or an object with 'mappings' (and optional 'ctx').")
 
+    if not isinstance(mappings, list):
+        raise ValueError("'mappings' must be a list")
+    if not isinstance(ctx, dict):
+        raise ValueError("'ctx' must be an object")
+    return mappings, ctx
+
+# -------------------------
+# META-ETL runner
+# -------------------------
+
+def run_meta(meta_path, default_delimiter):
+    with open(meta_path, "r", encoding="utf-8") as f:
+        meta = json.load(f)
+
+    meta_ctx = meta.get("ctx", {}) or {}
+    steps = meta.get("steps")
+    if not isinstance(steps, list) or not steps:
+        raise ValueError(f"{meta_path}: 'steps' must be a non-empty array")
+
+    prev_obj = None  # in-memory chain
+    final_obj = None
+
+    for idx, step in enumerate(steps, 1):
+        etl_rel = step.get("etl")
+        src_rel = step.get("src")
+        dst_rel = step.get("dst")  # optional
+        step_ctx = step.get("ctx", {}) or {}
+        options = step.get("options", {}) or {}
+
+        if not etl_rel or not src_rel:
+            raise ValueError(f"Step {idx}: missing required keys 'etl' and/or 'src'")
+
+        etl_path = os.path.join(os.path.dirname(meta_path), etl_rel)
+        mappings, etl_ctx = load_etl_file(etl_path)
+
+        # Effective context: meta < etl < step
+        eff_ctx = deepcopy(meta_ctx)
+        deep_merge(eff_ctx, etl_ctx)
+        deep_merge(eff_ctx, step_ctx)
+
+        # Step delimiter (fallback to default)
+        step_delim = options.get("delimiter", default_delimiter)
+
+        # Resolve SRC object
+        if src_rel == "$prev":
+            if prev_obj is None:
+                raise ValueError(f"Step {idx}: src '$prev' used but no previous output exists")
+            src_obj = prev_obj
+        else:
+            src_path = os.path.join(os.path.dirname(meta_path), src_rel)
+            with open(src_path, "r", encoding="utf-8") as f:
+                src_obj = json.load(f)
+
+        # Resolve DST seed object
+        if dst_rel == "$prev":
+            if prev_obj is None:
+                raise ValueError(f"Step {idx}: dst '$prev' used but no previous output exists")
+            dst_obj = deepcopy(prev_obj)
+        elif dst_rel:
+            dst_path = os.path.join(os.path.dirname(meta_path), dst_rel)
+            if os.path.exists(dst_path):
+                with open(dst_path, "r", encoding="utf-8") as f:
+                    dst_obj = json.load(f)
+            else:
+                dst_obj = {}
+        else:
+            # No dst provided -> start from {}
+            dst_obj = {}
+
+        # Run the ETL step (in-memory)
+        out_obj = run_etl(mappings, src_obj, dst_obj, step_delim, eff_ctx)
+        prev_obj = out_obj
+        final_obj = out_obj
+
+    return final_obj
+
+# -------------------------
+# CLI
+# -------------------------
+
+def main():
+    ap = argparse.ArgumentParser(description="JSON→JSON ETL (single or meta chain)")
+    mux = ap.add_mutually_exclusive_group(required=True)
+    mux.add_argument("--etl", help="ETL spec JSON file (single ETL)")
+    mux.add_argument("--meta", help="Meta-ETL spec JSON file (chain multiple ETLs)")
+
+    ap.add_argument("--src", help="Source JSON file (required for --etl)")
+    ap.add_argument("--dst", help="Destination/seed JSON file (required for --etl; created as {} if missing)")
+    ap.add_argument("--out", default="-", help="Output file (default: stdout)")
+    ap.add_argument("--delimiter", default="\\n", help="Default delimiter for string upserts (default: \\n)")
+
+    args = ap.parse_args()
+    delimiter = bytes(args.delimiter, "utf-8").decode("unicode_escape")
+
+    if args.meta:
+        # Run meta-ETL chain; --src/--dst are ignored in meta mode
+        result = run_meta(args.meta, default_delimiter=delimiter)
+        out_txt = json.dumps(result, ensure_ascii=False, indent=2)
+        if args.out == "-" or args.out is None:
+            print(out_txt)
+        else:
+            with open(args.out, "w", encoding="utf-8") as f:
+                f.write(out_txt)
+        return
+
+    # Single ETL mode
+    if not (args.etl and args.src and args.dst):
+        ap.error("for single ETL mode, the following are required: --etl, --src, --dst")
+
+    # Load ETL (mappings + inline ctx)
+    mappings, etl_ctx = load_etl_file(args.etl)
+
+    # Load source
     with open(args.src, "r", encoding="utf-8") as f:
         src_obj = json.load(f)
 
-    if os.path.exists(args.dst):
+    # Load or create destination
+    if args.dst and os.path.exists(args.dst):
         with open(args.dst, "r", encoding="utf-8") as f:
             dst_obj = json.load(f)
     else:
-        # If the destination file does not exist, initialize with an empty object
         dst_obj = {}
 
-    result = run_etl(mappings, src_obj, dst_obj, delimiter, ctx)
+    # Run single ETL with its inline ctx
+    result = run_etl(mappings, src_obj, dst_obj, delimiter, ctx=etl_ctx)
 
     out_txt = json.dumps(result, ensure_ascii=False, indent=2)
     if args.out == "-" or args.out is None:
@@ -343,7 +334,6 @@ def main():
     else:
         with open(args.out, "w", encoding="utf-8") as f:
             f.write(out_txt)
-
 
 if __name__ == "__main__":
     main()
