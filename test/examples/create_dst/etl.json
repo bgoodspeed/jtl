@@ -1,0 +1,6 @@
+[
+  { "src": ".user", "dst": ".account.profile" },
+  { "src": ".tags", "dst": ".account.tags" },
+  { "src": ".note1", "dst": ".meta.notes" },
+  { "src": ".note2", "dst": ".meta.notes" }
+]

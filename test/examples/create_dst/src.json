@@ -1,0 +1,6 @@
+{
+  "user": { "id": 42, "name": "Ben" },
+  "tags": ["red", "blue"],
+  "note1": "hello",
+  "note2": "world"
+}

@@ -1,0 +1,9 @@
+{
+  "account": {
+    "profile": { "id": 42, "name": "Ben" },
+    "tags": ["red", "blue"]
+  },
+  "meta": {
+    "notes": "hello\nworld"
+  }
+}

@@ -34,6 +34,7 @@ No filters/selects in dst — it must be a concrete path.
 
 import argparse
 import json
+import os
 import re
 import sys
 from copy import deepcopy
@@ -308,8 +309,12 @@ def main():
     with open(args.src, "r", encoding="utf-8") as f:
         src_obj = json.load(f)
 
-    with open(args.dst, "r", encoding="utf-8") as f:
-        dst_obj = json.load(f)
+    if os.path.exists(args.dst):
+        with open(args.dst, "r", encoding="utf-8") as f:
+            dst_obj = json.load(f)
+    else:
+        # If the destination file does not exist, initialize with an empty object
+        dst_obj = {}
 
     result = run_etl(etl_spec, src_obj, dst_obj, delimiter)
 
