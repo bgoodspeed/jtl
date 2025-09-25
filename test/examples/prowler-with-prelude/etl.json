@@ -1,0 +1,27 @@
+[
+  { "src": "$ctx.finding_title", "dst": ".title" },
+  { "src": "$ctx.cvss_score",    "dst": ".cvss_score" },
+  { "src": "$ctx.cvss_vector",   "dst": ".cvss_vector" },
+  { "src": "$ctx.dread_score",   "dst": ".dread_score" },
+  { "src": "$ctx.dread_vector",  "dst": ".dread_vector" },
+
+  { "src": "($matches[] | (.resources[]? | .data.metadata.arn // .uid // .name))", "dst": ".affected_entities" },
+
+  { "src": "$m.risk_details",               "dst": ".description" },
+  { "src": "$m.remediation.desc",           "dst": ".mitigation" },
+  { "src": "($m.remediation.references // [])[]?", "dst": ".references" },
+  { "src": "($m.resources[0].data.metadata | tostring)", "dst": ".text_evidence", "mode": "replace" },
+
+  { "with": "([ .[] | select(.finding_info.title == $ctx.finding_title) ]) as $matches | ($matches | first) as $m |" },
+
+  {
+    "ctx": {
+      "finding_title": "Ensure no Network ACLs allow ingress from 0.0.0.0/0 to Microsoft RDP port 3389",
+      "cvss_score": 6.9,
+      "cvss_vector": "CVSS:4.0/AV:N/AC:L/PR:N/AT:N/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N",
+      "dread_score": 9.0,
+      "dread_vector": "D:M/R:L/E:M/A:M/D:M",
+      "replication_steps": "<ol>\n<li>Configure your AWS profile using the <code>aws configure</code> command with keys for a SecurityAudit role&nbsp; for the <code>atlas</code> account</li>\n<li>Use the <code></code>command <code>aws ec2 describe-network-acls</code> </li>\n<li>Observe the <code>Entries</code> in the JSON output indicates the ingress is permitted</li>\n</ol>"
+    }
+  }
+]

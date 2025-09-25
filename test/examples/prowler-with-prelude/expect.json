@@ -1,0 +1,12 @@
+{
+  "title": "Ensure no Network ACLs allow ingress from 0.0.0.0/0 to Microsoft RDP port 3389",
+  "cvss_score": 6.9,
+  "cvss_vector": "CVSS:4.0/AV:N/AC:L/PR:N/AT:N/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N",
+  "dread_score": 9,
+  "dread_vector": "D:M/R:L/E:M/A:M/D:M",
+  "affected_entities": "arn:aws:ec2:ca-central-1:888888888888:network-acl/acl-0e6ab7b039a6571ef\narn:aws:ec2:ca-central-1:888888888888:network-acl/acl-0b13f50728bc2172b\narn:aws:ec2:eu-central-1:888888888888:network-acl/acl-014c96f62257770c0\narn:aws:ec2:eu-central-1:888888888888:network-acl/acl-069857a1c85fa71e4\narn:aws:ec2:eu-west-2:888888888888:network-acl/acl-0dced776bbc3472c1\narn:aws:ec2:us-east-1:888888888888:network-acl/acl-021f6500d63b0cfc6\narn:aws:ec2:us-east-1:888888888888:network-acl/acl-019b2553c06535bc8\narn:aws:ec2:us-east-1:888888888888:network-acl/acl-0b6839557b9071db4\narn:aws:ec2:us-east-1:888888888888:network-acl/acl-09bb3db82690769e4\narn:aws:ec2:us-east-1:888888888888:network-acl/acl-08251430bc752ceb4",
+  "description": "Even having a perimeter firewall, having network acls open allows any user or malware with vpc access to scan for well known and sensitive ports and gain access to instance.",
+  "mitigation": "Apply Zero Trust approach. Implement a process to scan and remediate unrestricted or overly permissive network acls. Recommended best practices is to narrow the definition for the minimum ports required.",
+  "references": "https://docs.aws.amazon.com/vpc/latest/userguide/vpc-network-acls.html",
+  "text_evidence": "{\"id\":\"acl-0e6ab7b039a6571ef\",\"arn\":\"arn:aws:ec2:ca-central-1:888888888888:network-acl/acl-0e6ab7b039a6571ef\",\"name\":\"\",\"region\":\"ca-central-1\",\"entries\":[{\"CidrBlock\":\"0.0.0.0/0\",\"Egress\":true,\"Protocol\":\"-1\",\"RuleAction\":\"allow\",\"RuleNumber\":100},{\"CidrBlock\":\"0.0.0.0/0\",\"Egress\":true,\"Protocol\":\"-1\",\"RuleAction\":\"deny\",\"RuleNumber\":32767},{\"CidrBlock\":\"0.0.0.0/0\",\"Egress\":false,\"Protocol\":\"-1\",\"RuleAction\":\"allow\",\"RuleNumber\":100},{\"CidrBlock\":\"0.0.0.0/0\",\"Egress\":false,\"Protocol\":\"-1\",\"RuleAction\":\"deny\",\"RuleNumber\":32767}],\"default\":true,\"in_use\":true,\"tags\":[]}"
+}
