@@ -290,50 +290,47 @@ def main():
 
     ap.add_argument("--src", help="Source JSON file (required for --etl)")
     ap.add_argument("--dst", help="Destination/seed JSON file (required for --etl; created as {} if missing)")
-    ap.add_argument("--out", default="-", help="Output file (default: stdout)")
-    ap.add_argument("--delimiter", default="\\n", help="Default delimiter for string upserts (default: \\n)")
+    ap.add_argument("--out", default="-", help="Output file (default: stdout). Use '-' for stdout explicitly.")
+    ap.add_argument("--stdout", action="store_true",
+                    help="Force writing output to stdout (overrides --out)")
+    ap.add_argument("--delimiter", default="\\n",
+                    help="Default delimiter for string upserts (default: \\n)")
 
     args = ap.parse_args()
     delimiter = bytes(args.delimiter, "utf-8").decode("unicode_escape")
 
-    if args.meta:
-        # Run meta-ETL chain; --src/--dst are ignored in meta mode
-        result = run_meta(args.meta, default_delimiter=delimiter)
-        out_txt = json.dumps(result, ensure_ascii=False, indent=2)
-        if args.out == "-" or args.out is None:
+    # Small helper to emit
+    def _emit(obj):
+        out_txt = json.dumps(obj, ensure_ascii=False, indent=2)
+        if args.stdout or args.out in (None, "-", ""):
             print(out_txt)
         else:
             with open(args.out, "w", encoding="utf-8") as f:
                 f.write(out_txt)
+
+    if args.meta:
+        result = run_meta(args.meta, default_delimiter=delimiter)
+        _emit(result)
         return
 
     # Single ETL mode
     if not (args.etl and args.src and args.dst):
         ap.error("for single ETL mode, the following are required: --etl, --src, --dst")
 
-    # Load ETL (mappings + inline ctx)
     mappings, etl_ctx = load_etl_file(args.etl)
 
-    # Load source
     with open(args.src, "r", encoding="utf-8") as f:
         src_obj = json.load(f)
 
-    # Load or create destination
     if args.dst and os.path.exists(args.dst):
         with open(args.dst, "r", encoding="utf-8") as f:
             dst_obj = json.load(f)
     else:
         dst_obj = {}
 
-    # Run single ETL with its inline ctx
     result = run_etl(mappings, src_obj, dst_obj, delimiter, ctx=etl_ctx)
+    _emit(result)
 
-    out_txt = json.dumps(result, ensure_ascii=False, indent=2)
-    if args.out == "-" or args.out is None:
-        print(out_txt)
-    else:
-        with open(args.out, "w", encoding="utf-8") as f:
-            f.write(out_txt)
-
+    
 if __name__ == "__main__":
     main()
