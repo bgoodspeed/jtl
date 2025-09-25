@@ -141,21 +141,22 @@ def set_path_value(root, path_segments, value, mode, delimiter):
 # ETL core
 # -------------------------
 
-def evaluate_src(expr, src_obj, ctx_obj):
-    """Evaluate jq expression against src_obj with $ctx bound (portable: no with_args)."""
+def evaluate_src(expr, src_obj, ctx_obj, prelude):
     ctx_json = json.dumps(ctx_obj, ensure_ascii=False)
-    wrapped = f"({ctx_json}) as $ctx | ({expr})"
+    # Compose: ($ctx) | <prelude> ( <expr> )
+    # prelude can be empty string.
+    wrapped = f"({ctx_json}) as $ctx | {prelude} ({expr})"
     prog = jq.compile(wrapped)
     return list(prog.input(src_obj).all())
 
-def apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx):
+def apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx, prelude):
     src_expr = mapping["src"]
     dst_path = mapping["dst"]
     mode = mapping.get("mode", "upsert").lower()
     if mode not in ("upsert", "replace"):
         raise ValueError(f"Unsupported mode: {mode}")
 
-    results = evaluate_src(src_expr, src_obj, ctx)
+    results = evaluate_src(src_expr, src_obj, ctx, prelude)
     segs = parse_jq_path(dst_path)
 
     if mode == "replace":
@@ -172,11 +173,11 @@ def apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx):
     for val in results:
         set_path_value(dst_obj, segs, val, mode="upsert", delimiter=delimiter)
 
-def run_etl(mappings, src_obj, dst_obj, delimiter, ctx):
+def run_etl(mappings, src_obj, dst_obj, delimiter, ctx, prelude):
     for mapping in mappings:
         if "src" not in mapping or "dst" not in mapping:
             raise ValueError("Each mapping must include 'src' and 'dst'")
-        apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx)
+        apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx, prelude)
     return dst_obj
 
 # -------------------------
@@ -184,29 +185,27 @@ def run_etl(mappings, src_obj, dst_obj, delimiter, ctx):
 # -------------------------
 
 def load_etl_file(path):
-    """Return (mappings:list, ctx:dict). Supports array-form with trailing {'ctx':{}} or object-form."""
     with open(path, "r", encoding="utf-8") as f:
         raw = json.load(f)
 
-    mappings, ctx = [], {}
+    mappings, ctx, prelude = [], {}, ""
     if isinstance(raw, list):
         for item in raw:
             if isinstance(item, dict) and "ctx" in item and len(item) == 1:
                 if item["ctx"]:
                     deep_merge(ctx, item["ctx"])
+            elif isinstance(item, dict) and "with" in item and len(item) == 1:
+                prelude = (item["with"] or "").strip()
             else:
                 mappings.append(item)
     elif isinstance(raw, dict):
         mappings = raw.get("mappings", [])
         ctx = raw.get("ctx", {}) or {}
+        prelude = (raw.get("with", "") or "").strip()
     else:
-        raise ValueError("ETL spec must be a JSON array or an object with 'mappings' (and optional 'ctx').")
+        raise ValueError("ETL spec must be a JSON array or object")
 
-    if not isinstance(mappings, list):
-        raise ValueError("'mappings' must be a list")
-    if not isinstance(ctx, dict):
-        raise ValueError("'ctx' must be an object")
-    return mappings, ctx
+    return mappings, ctx, prelude
 
 # -------------------------
 # META-ETL runner
@@ -235,7 +234,7 @@ def run_meta(meta_path, default_delimiter):
             raise ValueError(f"Step {idx}: missing required keys 'etl' and/or 'src'")
 
         etl_path = os.path.join(os.path.dirname(meta_path), etl_rel)
-        mappings, etl_ctx = load_etl_file(etl_path)
+        mappings, etl_ctx, prelude = load_etl_file(etl_path)
 
         # Effective context: meta < etl < step
         eff_ctx = deepcopy(meta_ctx)
@@ -272,7 +271,7 @@ def run_meta(meta_path, default_delimiter):
             dst_obj = {}
 
         # Run the ETL step (in-memory)
-        out_obj = run_etl(mappings, src_obj, dst_obj, step_delim, eff_ctx)
+        out_obj = run_etl(mappings, src_obj, dst_obj, step_delim, eff_ctx, prelude)
         prev_obj = out_obj
         final_obj = out_obj
 
@@ -317,7 +316,7 @@ def main():
     if not (args.etl and args.src and args.dst):
         ap.error("for single ETL mode, the following are required: --etl, --src, --dst")
 
-    mappings, etl_ctx = load_etl_file(args.etl)
+    mappings, etl_ctx, prelude = load_etl_file(args.etl)
 
     with open(args.src, "r", encoding="utf-8") as f:
         src_obj = json.load(f)
@@ -328,7 +327,7 @@ def main():
     else:
         dst_obj = {}
 
-    result = run_etl(mappings, src_obj, dst_obj, delimiter, ctx=etl_ctx)
+    result = run_etl(mappings, src_obj, dst_obj, delimiter, ctx=etl_ctx, prelude=prelude)
     _emit(result)
 
 

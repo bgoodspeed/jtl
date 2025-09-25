@@ -1,0 +1,15 @@
+[
+  { "src": "$ctx.finding_title",                       "dst": ".title" },
+  { "src": "($m.resources[]? | .data.metadata.arn // .uid // .name)", "dst": ".affected_entities" },
+  { "src": "$m.risk_details",                          "dst": ".description" },
+  { "src": "(\n    ($m.remediation.references // [])\n    | reduce .[] as $r ([]; if index($r) then . else . + [$r] end)\n    | join(\"\\n\")\n  )", "dst": ".references", "mode": "replace" },
+  { "src": "($m.resources[0].data.metadata | tostring)", "dst": ".text_evidence", "mode": "replace" },
+
+  { "with": "([ .[] | select(.finding_info.title == $ctx.finding_title) ] | first) as $m |" },
+
+  {
+    "ctx": {
+      "finding_title": "Ensure no Network ACLs allow ingress from 0.0.0.0/0 to Microsoft RDP port 3389"
+    }
+  }
+]

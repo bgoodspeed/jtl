@@ -1,0 +1,27 @@
+[
+  {
+    "finding_info": { "title": "Ensure no Network ACLs allow ingress from 0.0.0.0/0 to Microsoft RDP port 3389" },
+    "risk_details": "Network ACL allows ingress from 0.0.0.0/0 to RDP (3389).",
+    "remediation": {
+      "desc": "Restrict ingress to least privilege.",
+      "references": [
+        "https://docs.aws.amazon.com/vpc/latest/userguide/vpc-network-acls.html",
+        "https://aws.amazon.com/architecture/security-identity-compliance/"
+      ]
+    },
+    "resources": [
+      {
+        "data": {
+          "metadata": {
+            "arn": "arn:aws:ec2:ca-central-1:111111111111:network-acl/acl-123456",
+            "id": "acl-123456",
+            "region": "ca-central-1",
+            "default": true
+          }
+        },
+        "uid": "arn:aws:ec2:ca-central-1:111111111111:network-acl/acl-123456",
+        "name": "acl-123456"
+      }
+    ]
+  }
+]
