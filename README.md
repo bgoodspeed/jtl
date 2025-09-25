@@ -1,3 +1,5 @@
+![JTL Logo](https://raw.githubusercontent.com/bgoodspeed/jtl/main/assets/logo.png)
+
 # JTL - JSON-to-JSON Transform Loader
 
 **JTL** is a small, declarative JSON-JSON ETL tool powered by jq. It’s designed to help you extract data from scanner outputs (Trivy, Prowler, etc.) and map them into a fixed structure (e.g., a `finding` object with `title`, `affected_entities`, `description`, …).
