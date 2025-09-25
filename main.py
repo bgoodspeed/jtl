@@ -331,6 +331,6 @@ def main():
     result = run_etl(mappings, src_obj, dst_obj, delimiter, ctx=etl_ctx)
     _emit(result)
 
-    
+
 if __name__ == "__main__":
     main()
