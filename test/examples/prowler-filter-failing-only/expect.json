@@ -1,0 +1,12 @@
+{
+  "title": "Check if IAM Access Analyzer is enabled",
+  "cvss_score": 6.9,
+  "cvss_vector": "CVSS:4.0/AV:N/AC:L/PR:N/AT:N/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N",
+  "dread_score": 9,
+  "dread_vector": "D:M/R:L/E:M/A:M/D:M",
+  "affected_entities": "arn:aws:accessanalyzer:ap-south-1:888888888888:analyzer/unknown\narn:aws:accessanalyzer:ap-southeast-1:888888888888:analyzer/unknown\narn:aws:accessanalyzer:ap-southeast-2:888888888888:analyzer/unknown\narn:aws:accessanalyzer:ca-central-1:888888888888:analyzer/unknown\narn:aws:accessanalyzer:eu-central-1:888888888888:analyzer/unknown\narn:aws:accessanalyzer:eu-west-1:888888888888:analyzer/unknown\narn:aws:accessanalyzer:eu-west-2:888888888888:analyzer/unknown\narn:aws:accessanalyzer:us-east-1:888888888888:analyzer/unknown\narn:aws:accessanalyzer:us-east-2:888888888888:analyzer/unknown",
+  "description": "AWS IAM Access Analyzer helps you identify the resources in your organization and accounts, such as Amazon S3 buckets or IAM roles, that are shared with an external entity. This lets you identify unintended access to your resources and data, which is a security risk. IAM Access Analyzer uses a form of mathematical analysis called automated reasoning, which applies logic and mathematical inference to determine all possible access paths allowed by a resource policy.",
+  "mitigation": "Enable IAM Access Analyzer for all accounts, create analyzer and take action over it is recommendations (IAM Access Analyzer is available at no additional cost).",
+  "references": "https://docs.aws.amazon.com/IAM/latest/UserGuide/what-is-access-analyzer.html",
+  "text_evidence": "{\"arn\":\"arn:aws:accessanalyzer:ap-south-1:888888888888:analyzer/unknown\",\"name\":\"analyzer/unknown\",\"status\":\"NOT_AVAILABLE\",\"findings\":[],\"tags\":[],\"type\":\"\",\"region\":\"ap-south-1\"}"
+}
