@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jtl"
+version = "0.1.0"
+description = "JTL - JSON-to-JSON Extract/Transform Loader (jq-powered ETL for security scanners and more)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Your Name" }]
+keywords = ["jq", "json", "etl", "security", "trivy", "prowler", "scoutsuite"]
+dependencies = [
+  "jq>=1.6.0"
+]
+
+# This exposes a `jtl` CLI on install
+[project.scripts]
+jtl = "jtl:main"
+
+[tool.setuptools]
+# We’re packaging a single module file named jtl.py
+py-modules = ["jtl"]

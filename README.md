@@ -1,6 +1,6 @@
-# JTL — JSON-to-JSON Transform Loader
+# JTL - JSON-to-JSON Transform Loader
 
-**JTL** is a small, declarative JSON→JSON ETL tool powered by jq. It’s designed to help you extract data from scanner outputs (Trivy, Prowler, etc.) and map them into a fixed structure (e.g., a `finding` object with `title`, `affected_entities`, `description`, …).
+**JTL** is a small, declarative JSON-JSON ETL tool powered by jq. It’s designed to help you extract data from scanner outputs (Trivy, Prowler, etc.) and map them into a fixed structure (e.g., a `finding` object with `title`, `affected_entities`, `description`, …).
 
 You describe mappings as one‑liners in an ETL spec (`etl.json`) and run them against a source JSON (`src.json`) and an optional destination/seed JSON (`dst.json`). You can also chain multiple ETLs with a **meta-ETL** (`meta.json`), with context (`ctx`) that’s available to jq expressions.
 
@@ -9,7 +9,8 @@ You describe mappings as one‑liners in an ETL spec (`etl.json`) and run them a
 ## Installation
 
 ```bash
-pip install jq
+$ # clone repository, enter the directory
+$ pip install .
 ```
 > Requires Python 3.9+
 
@@ -17,6 +18,7 @@ pip install jq
 
 ## Usage
 
+Run as `python jtl.py`, or as `jtl` if installed via pip above.
 ### Single ETL
 
 Run a single ETL spec against a source and destination:

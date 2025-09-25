@@ -292,7 +292,7 @@ def run_meta(meta_path, default_delimiter):
 # -------------------------
 
 def main():
-    ap = argparse.ArgumentParser(description="JSON→JSON ETL (single or meta chain)")
+    ap = argparse.ArgumentParser(description="JSON-JSON ETL (single or meta chain) Declaratively extract and transform one JSON structure to another")
     mux = ap.add_mutually_exclusive_group(required=True)
     mux.add_argument("--etl", help="ETL spec JSON file (single ETL)")
     mux.add_argument("--meta", help="Meta-ETL spec JSON file (chain multiple ETLs)")
