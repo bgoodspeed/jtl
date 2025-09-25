@@ -11,9 +11,19 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 MAIN_SCRIPT = os.path.join(PROJECT_ROOT, "main.py")
 EXAMPLES_DIR = os.path.join(os.path.dirname(__file__), "examples")
 
-REQUIRED_FILES = ("src.json", "etl.json", "dst.json")
+REQUIRED_FILES = ("src.json", "etl.json")
+OPTIONAL_DST = "dst.json"
 OPTIONAL_EXPECT = "expect.json"
-OPTIONAL_OPTIONS = "options.json"  # optional per-case options, e.g. {"delimiter": " | "}
+OPTIONAL_OPTIONS = "options.json"  # e.g. {"delimiter": " | "}
+
+def _list_case_dirs():
+    if not os.path.isdir(EXAMPLES_DIR):
+        return []
+    # Only immediate subdirectories (ignore hidden/OS files)
+    return sorted(
+        d for d in os.listdir(EXAMPLES_DIR)
+        if os.path.isdir(os.path.join(EXAMPLES_DIR, d)) and not d.startswith(".")
+    )
 
 class FileLevelETLTests(unittest.TestCase):
     @classmethod
@@ -23,51 +33,90 @@ class FileLevelETLTests(unittest.TestCase):
         if not os.path.isdir(EXAMPLES_DIR):
             raise unittest.SkipTest(f"examples dir not found at {EXAMPLES_DIR}")
 
-    def _discover_cases(self):
+    def _discover_cases_or_fail(self):
+        case_dirs = _list_case_dirs()
+        self.assertTrue(case_dirs, f"No subdirectories found under {EXAMPLES_DIR} — add at least one test case folder.")
+        self.maxDiff = None
+
         cases = []
-        for entry in sorted(os.listdir(EXAMPLES_DIR)):
+        missing = []  # collect missing required files per case dir
+
+        for entry in case_dirs:
             case_dir = os.path.join(EXAMPLES_DIR, entry)
-            if not os.path.isdir(case_dir):
+
+            # required files must exist; if not, record error for this dir
+            req_missing = []
+            src_path = os.path.join(case_dir, "src.json")
+            etl_path = os.path.join(case_dir, "etl.json")
+            if not os.path.exists(src_path): req_missing.append("src.json")
+            if not os.path.exists(etl_path): req_missing.append("etl.json")
+
+            if req_missing:
+                missing.append((entry, req_missing))
+                # still append a stub so count alignment check can report properly
                 continue
-            req_paths = {name: os.path.join(case_dir, name) for name in REQUIRED_FILES}
-            if all(os.path.exists(p) for p in req_paths.values()):
-                expect_path = os.path.join(case_dir, OPTIONAL_EXPECT)
-                options_path = os.path.join(case_dir, OPTIONAL_OPTIONS)
-                options = {}
-                if os.path.exists(options_path):
-                    with open(options_path, "r", encoding="utf-8") as f:
-                        options = json.load(f)
-                cases.append({
-                    "name": entry,
-                    "dir": case_dir,
-                    "src": req_paths["src.json"],
-                    "etl": req_paths["etl.json"],
-                    "dst": req_paths["dst.json"],
-                    "expect": expect_path if os.path.exists(expect_path) else None,
-                    "options": options,
-                })
+
+            # optional files
+            dst_path = os.path.join(case_dir, OPTIONAL_DST)
+            expect_path = os.path.join(case_dir, OPTIONAL_EXPECT)
+            options_path = os.path.join(case_dir, OPTIONAL_OPTIONS)
+
+            options = {}
+            if os.path.exists(options_path):
+                with open(options_path, "r", encoding="utf-8") as f:
+                    options = json.load(f)
+
+            cases.append({
+                "name": entry,
+                "dir": case_dir,
+                "src": src_path,
+                "etl": etl_path,
+                "dst": dst_path if os.path.exists(dst_path) else None,
+                "expect": expect_path if os.path.exists(expect_path) else None,
+                "options": options,
+            })
+
+        # Assert that every subdirectory is runnable; if not, show detailed reasons.
+        if missing:
+            msgs = []
+            for entry, req_missing in missing:
+                msgs.append(f"- {entry}: missing {', '.join(req_missing)}")
+            self.fail(
+                "Some example case directories are missing required files:\n" +
+                "\n".join(msgs) +
+                f"\n\nEach case folder must contain: {', '.join(REQUIRED_FILES)}"
+            )
+
+        # Also assert count alignment (belt-and-suspenders)
+        self.assertEqual(
+            len(cases), len(case_dirs),
+            f"Discovered {len(cases)} runnable cases but found {len(case_dirs)} subdirectories. "
+            "Every subdirectory is expected to be a runnable case."
+        )
+
         return cases
 
     def test_examples(self):
-        cases = self._discover_cases()
-        self.assertTrue(len(cases) > 0, "No test cases found under test/examples/*/")
+        cases = self._discover_cases_or_fail()
         for case in cases:
             with self.subTest(case=case["name"]):
                 with tempfile.TemporaryDirectory(prefix=f"etl_{case['name']}_") as tmpdir:
                     tmp_dst = os.path.join(tmpdir, "dst.json")
-                    shutil.copyfile(case["dst"], tmp_dst)
                     tmp_out = os.path.join(tmpdir, "out.json")
 
+                    # If the case has a dst.json, copy it; else leave tmp_dst absent so the app creates {}
+                    if case["dst"] is not None:
+                        shutil.copyfile(case["dst"], tmp_dst)
+                    # Build command
                     cmd = [
                         sys.executable,
                         MAIN_SCRIPT,
                         "--etl", case["etl"],
                         "--src", case["src"],
-                        "--dst", tmp_dst,
+                        "--dst", tmp_dst,   # always pass a path; may not exist yet
                         "--out", tmp_out,
                     ]
-
-                    # Optional per-case options (currently only delimiter supported)
+                    # Optional per-case options (currently supports --delimiter)
                     delimiter = case["options"].get("delimiter")
                     if delimiter is not None:
                         cmd += ["--delimiter", delimiter]
@@ -80,14 +129,17 @@ class FileLevelETLTests(unittest.TestCase):
                             f"STDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
                         )
 
-                    # Validate
+                    # Validate output exists & parse
                     with open(tmp_out, "r", encoding="utf-8") as f:
                         got = json.load(f)
 
+                    # Compare to expect.json if present
                     if case["expect"] is not None:
                         with open(case["expect"], "r", encoding="utf-8") as f:
                             expected = json.load(f)
                         self.assertEqual(got, expected, f"Output mismatch for case '{case['name']}'")
                     else:
-                        # At least assert the result is a dict or array (valid JSON already guaranteed)
                         self.assertTrue(isinstance(got, (dict, list)), "Output should be object or array")
+
+if __name__ == "__main__":
+    unittest.main()

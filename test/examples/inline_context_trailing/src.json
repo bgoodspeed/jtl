@@ -1,0 +1,4 @@
+[
+  { "Arn": "arn:aws:ec2:region:acct:instance/i-aaaa", "Type": "EC2" },
+  { "Arn": "arn:aws:ec2:region:acct:instance/i-bbbb", "Type": "EC2" }
+]

@@ -238,21 +238,30 @@ def set_path_value(root, path_segments, value, mode, delimiter):
 # ETL processing
 # -------------------------
 
-def evaluate_src(expr, src_obj):
-    """Evaluate a jq expression against src_obj, return list of results."""
-    prog = jq.compile(expr)
-    # Using .input(src_obj).all() handles streaming outputs
+
+def evaluate_src(expr: str, src_obj, ctx_obj):
+    """
+    Evaluate a jq expression against src_obj with $ctx available,
+    without relying on .with_args().
+    """
+    # Inline ctx as a jq binding:
+    #   (<ctx_json>) as $ctx | (<expr>)
+    ctx_json = json.dumps(ctx_obj, ensure_ascii=False)
+    wrapped = f"({ctx_json}) as $ctx | ({expr})"
+    prog = jq.compile(wrapped)
+    # Keep using the API you already have (ProgramWithInput -> .all())
     return list(prog.input(src_obj).all())
 
-def apply_mapping(src_obj, dst_obj, mapping, delimiter):
+def apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx):
     src_expr = mapping["src"]
     dst_path = mapping["dst"]
     mode = mapping.get("mode", "upsert").lower()
     if mode not in ("upsert", "replace"):
         raise ValueError(f"Unsupported mode: {mode}")
-    results = evaluate_src(src_expr, src_obj)
 
-    # replace: set to null (if 0 results), single value, or array of results
+    # <-- ctx used here
+    results = evaluate_src(src_expr, src_obj, ctx)
+
     if mode == "replace":
         if len(results) == 0:
             value = None
@@ -264,20 +273,15 @@ def apply_mapping(src_obj, dst_obj, mapping, delimiter):
         set_path_value(dst_obj, segs, value, mode="replace", delimiter=delimiter)
         return
 
-    # upsert: apply sequentially
     segs = parse_jq_path(dst_path)
-    if len(results) == 0:
-        # Nothing to apply
-        return
     for val in results:
         set_path_value(dst_obj, segs, val, mode="upsert", delimiter=delimiter)
 
-def run_etl(etl_spec, src_obj, dst_obj, delimiter):
-    # Preserve order; allow multiple rules for same dst
+def run_etl(etl_spec, src_obj, dst_obj, delimiter, ctx):
     for mapping in etl_spec:
         if "src" not in mapping or "dst" not in mapping:
             raise ValueError("Each mapping must include 'src' and 'dst'")
-        apply_mapping(src_obj, dst_obj, mapping, delimiter)
+        apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx)
     return dst_obj
 
 # -------------------------
@@ -302,9 +306,24 @@ def main():
     delimiter = bytes(args.delimiter, "utf-8").decode("unicode_escape")
 
     with open(args.etl, "r", encoding="utf-8") as f:
-        etl_spec = json.load(f)
-        if not isinstance(etl_spec, list):
-            raise ValueError("ETL spec must be a JSON array")
+        raw = json.load(f)
+
+    # Support either array form (mappings with optional trailing { "ctx": {...} })
+    # or object form { "mappings": [...], "ctx": {...} }.
+    if isinstance(raw, list):
+        ctx = {}
+        mappings = []
+        for item in raw:
+            if isinstance(item, dict) and "ctx" in item:
+                if item["ctx"]:
+                    ctx.update(item["ctx"])
+            else:
+                mappings.append(item)
+    elif isinstance(raw, dict):
+        mappings = raw.get("mappings", [])
+        ctx = raw.get("ctx", {}) or {}
+    else:
+        raise ValueError("ETL spec must be a JSON array or an object with 'mappings' (and optional 'ctx').")
 
     with open(args.src, "r", encoding="utf-8") as f:
         src_obj = json.load(f)
@@ -316,7 +335,7 @@ def main():
         # If the destination file does not exist, initialize with an empty object
         dst_obj = {}
 
-    result = run_etl(etl_spec, src_obj, dst_obj, delimiter)
+    result = run_etl(mappings, src_obj, dst_obj, delimiter, ctx)
 
     out_txt = json.dumps(result, ensure_ascii=False, indent=2)
     if args.out == "-" or args.out is None:
