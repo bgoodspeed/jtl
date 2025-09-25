@@ -1,0 +1,7 @@
+{
+  "finding": {
+    "title": "Issue: EC2",
+    "affected_entities": "arn:aws:ec2:region:acct:instance/i-aaaa\narn:aws:ec2:region:acct:instance/i-bbbb",
+    "description": "Detected type: EC2 — please review."
+  }
+}
