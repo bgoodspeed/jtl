@@ -1,0 +1,5 @@
+[
+  { "src": ".[] | .Arn", "dst": ".a_default" },
+  { "src": ".[] | .Arn", "dst": ".a_csv", "delimiter": ", " },
+  { "src": ".[] | .Ref", "dst": ".refs", "delimiter": " | " }
+]

@@ -1,0 +1,5 @@
+{
+  "a_default": "arn:1\narn:2",
+  "a_csv": "arn:1, arn:2",
+  "refs": "r1 | r2"
+}

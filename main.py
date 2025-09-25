@@ -149,12 +149,22 @@ def evaluate_src(expr, src_obj, ctx_obj, prelude):
     prog = jq.compile(wrapped)
     return list(prog.input(src_obj).all())
 
-def apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx, prelude):
+def _decode_delim(s: str) -> str:
+    # match CLI behavior: accept "\n", "\t", etc.
+    return bytes(s, "utf-8").decode("unicode_escape")
+
+def apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx, prelude=""):
     src_expr = mapping["src"]
     dst_path = mapping["dst"]
     mode = mapping.get("mode", "upsert").lower()
     if mode not in ("upsert", "replace"):
         raise ValueError(f"Unsupported mode: {mode}")
+
+    # NEW: per-row delimiter (overrides step/CLI default)
+    if "delimiter" in mapping and mapping["delimiter"] is not None:
+        eff_delim = _decode_delim(mapping["delimiter"])
+    else:
+        eff_delim = delimiter
 
     results = evaluate_src(src_expr, src_obj, ctx, prelude)
     segs = parse_jq_path(dst_path)
@@ -166,12 +176,12 @@ def apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx, prelude):
             value = results[0]
         else:
             value = results
-        set_path_value(dst_obj, segs, value, mode="replace", delimiter=delimiter)
+        set_path_value(dst_obj, segs, value, mode="replace", delimiter=eff_delim)
         return
 
-    # upsert per item
+    # upsert per item (string upserts will use eff_delim)
     for val in results:
-        set_path_value(dst_obj, segs, val, mode="upsert", delimiter=delimiter)
+        set_path_value(dst_obj, segs, val, mode="upsert", delimiter=eff_delim)
 
 def run_etl(mappings, src_obj, dst_obj, delimiter, ctx, prelude):
     for mapping in mappings:
