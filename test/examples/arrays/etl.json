@@ -1,0 +1,4 @@
+[
+  { "src": ".arr", "dst": ".nums" },
+  { "src": ".arr[] | select(. > 1)", "dst": ".nums", "mode": "replace" }
+]

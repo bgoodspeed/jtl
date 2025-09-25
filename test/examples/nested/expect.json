@@ -1,0 +1,5 @@
+{
+  "root": {
+    "branch": [null, null, { "leaf": "hello\nworld" }]
+  }
+}

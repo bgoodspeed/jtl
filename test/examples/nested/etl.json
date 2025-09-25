@@ -1,0 +1,4 @@
+[
+  { "src": ".val1", "dst": ".root.branch[2].leaf" },
+  { "src": ".val2", "dst": ".root.branch[2].leaf" }
+]
