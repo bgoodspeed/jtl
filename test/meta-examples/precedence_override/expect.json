@@ -1,0 +1,7 @@
+{
+  "finding": {
+    "title": "Issue: S3",
+    "affected_entities": "arn:aws:s3:::bucket-1\narn:aws:s3:::bucket-2",
+    "description": "Detected: S3 - check controls"
+  }
+}

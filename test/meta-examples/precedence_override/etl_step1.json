@@ -1,0 +1,8 @@
+{
+  "mappings": [
+    { "src": ".[] | .Arn", "dst": ".finding.affected_entities" }
+  ],
+  "ctx": {
+    "preamble": "Type: "
+  }
+}

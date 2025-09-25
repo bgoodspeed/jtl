@@ -1,0 +1,4 @@
+[
+  { "src": "$ctx.preamble + ([.[].Type] | first) + $ctx.suffix", "dst": ".finding.description", "mode": "replace" },
+  { "src": "\"Issue: \" + ([.[].Type] | first)", "dst": ".finding.title", "mode": "replace" }
+]

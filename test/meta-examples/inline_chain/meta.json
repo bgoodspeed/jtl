@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "ctx": { "suffix": " — please review." },
+  "steps": [
+    { "etl": "etl_step1.json", "src": "src.json" },
+    { "etl": "etl_step2.json", "src": "src.json", "dst": "$prev", "ctx": { "preamble": "Detected type: " } }
+  ]
+}

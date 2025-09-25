@@ -1,0 +1,4 @@
+[
+  { "Arn": "arn:aws:s3:::bucket-1", "Type": "S3" },
+  { "Arn": "arn:aws:s3:::bucket-2", "Type": "S3" }
+]
