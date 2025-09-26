@@ -179,6 +179,18 @@ Output:
 }
 ```
 
+### Context overrides from the CLI
+
+You can override `$ctx` keys at runtime:
+
+```bash
+jtl --etl etl.json --src src.json --stdout \
+    --ctx account "Other Account Name" \
+    --ctx account.id 123456789012 \
+    --ctx flags.is_prod true \
+    --ctx weights '{"risk": 0.7, "impact": 0.9}'
+```
+
 ---
 
 ## Writing ETLs

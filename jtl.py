@@ -54,7 +54,28 @@ def parse_jq_path(path: str):
 # -------------------------
 # JSON helpers
 # -------------------------
+def _try_json_parse(s):
+    try:
+        return json.loads(s)
+    except Exception:
+        return s
 
+def _set_dotted(obj, dotted_key, value):
+    parts = dotted_key.split(".")
+    cur = obj
+    for p in parts[:-1]:
+        if p not in cur or not isinstance(cur[p], dict):
+            cur[p] = {}
+        cur = cur[p]
+    cur[parts[-1]] = value
+
+def _merge_cli_ctx(pairs):
+    cli_ctx = {}
+    if not pairs:
+        return cli_ctx
+    for k, v in pairs:
+        _set_dotted(cli_ctx, k, _try_json_parse(v))
+    return cli_ctx
 def deep_merge(dst, src):
     """Deep-merge src into dst (dicts only). Returns merged in place on dicts; otherwise src."""
     if not isinstance(dst, dict) or not isinstance(src, dict):
@@ -235,7 +256,7 @@ def load_etl_file(path):
 # META-ETL runner
 # -------------------------
 
-def run_meta(meta_path, default_delimiter):
+def run_meta(meta_path, default_delimiter, cli_ctx):
     with open(meta_path, "r", encoding="utf-8") as f:
         meta = json.load(f)
 
@@ -264,6 +285,7 @@ def run_meta(meta_path, default_delimiter):
         eff_ctx = deepcopy(meta_ctx)
         deep_merge(eff_ctx, etl_ctx)
         deep_merge(eff_ctx, step_ctx)
+        deep_merge(eff_ctx, cli_ctx)  # CLI has highest precedence
 
         # Step delimiter (fallback to default)
         step_delim = options.get("delimiter", default_delimiter)
@@ -318,8 +340,15 @@ def main():
                     help="Force writing output to stdout (overrides --out)")
     ap.add_argument("--delimiter", default="\\n",
                     help="Default delimiter for string upserts (default: \\n)")
-
+    ap.add_argument(
+        "--ctx",
+        nargs=2,
+        action="append",
+        metavar=("KEY", "VALUE"),
+        help="Override/extend $ctx: KEY VALUE. May be repeated. Values parsed as JSON if possible."
+    )
     args = ap.parse_args()
+    cli_ctx = _merge_cli_ctx(args.ctx)
     delimiter = bytes(args.delimiter, "utf-8").decode("unicode_escape")
 
     # Small helper to emit
@@ -332,7 +361,7 @@ def main():
                 f.write(out_txt)
 
     if args.meta:
-        result = run_meta(args.meta, default_delimiter=delimiter)
+        result = run_meta(args.meta, default_delimiter=delimiter, cli_ctx=cli_ctx)
         _emit(result)
         return
 
@@ -351,6 +380,8 @@ def main():
     else:
         dst_obj = {}
 
+    effective_ctx = deepcopy(etl_ctx)
+    deep_merge(effective_ctx, cli_ctx)  # CLI wins
     result = run_etl(mappings, src_obj, dst_obj, delimiter, ctx=etl_ctx, prelude=prelude)
     _emit(result)
 
