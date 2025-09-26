@@ -1,0 +1,10 @@
+[
+  {
+    "src": ".vals[]",
+    "dst": ".wrapped",
+    "delimiter": "</li><li>",
+    "prefix": "<ol title=\"${account}\"><li>",
+    "suffix": "</li></ol>"
+  },
+  { "ctx": { "account": "The AWS Account" } }
+]

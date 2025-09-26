@@ -1,0 +1,10 @@
+[
+  {
+    "src": "([ .names[] ] | join(\", \"))",
+    "dst": ".wrapped",
+    "mode": "replace",
+    "prefix": "<p data-acct=\"${account.name}\">",
+    "suffix": "</p>"
+  },
+  { "ctx": { "account": { "name": "Other Account Name" } } }
+]

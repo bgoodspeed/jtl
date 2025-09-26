@@ -7,6 +7,7 @@ import re
 import sys
 from copy import deepcopy
 
+import string
 import jq
 
 # -------------------------
@@ -54,6 +55,56 @@ def parse_jq_path(path: str):
 # -------------------------
 # JSON helpers
 # -------------------------
+
+_DOTTED_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_.]*)\}")
+
+def _flatten_ctx(obj, prefix="", out=None):
+    """Flatten nested ctx into dotted keys: {'a':{'b':1}} -> {'a': {'b':1}, 'a.b': 1}"""
+    if out is None:
+        out = {}
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            key = f"{prefix}.{k}" if prefix else k
+            out[key] = v  # keep the object at the non-dotted key too
+            _flatten_ctx(v, key, out)
+    return out
+
+def _stringify_values(d):
+    """Stringify values for substitution (dict/list -> JSON; None -> ''; else str)."""
+    out = {}
+    for k, v in d.items():
+        if isinstance(v, (dict, list)):
+            out[k] = json.dumps(v, ensure_ascii=False)
+        elif v is None:
+            out[k] = ""
+        else:
+            out[k] = str(v)
+    return out
+
+def _substitute_ctx(template, ctx):
+    """
+    Substitute ${var} or ${a.b.c} from ctx.
+    Supports escaping a literal '$' via '$$' (becomes a single '$').
+    Leaves unknown variables untouched.
+    """
+    if not template:
+        return ""
+
+    # Protect literal dollars
+    _DOLLAR_SENTINEL = "\u0000DOLLAR\u0000"
+    s = template.replace("$$", _DOLLAR_SENTINEL)
+
+    flat = _flatten_ctx(ctx)
+    mapping = _stringify_values(flat)
+
+    def _repl(m):
+        key = m.group(1)
+        return mapping.get(key, m.group(0))  # unknown -> leave as-is
+
+    s = _DOTTED_VAR_RE.sub(_repl, s)
+
+    # Restore literal dollars
+    return s.replace(_DOLLAR_SENTINEL, "$")
 def _try_json_parse(s):
     try:
         return json.loads(s)
@@ -188,8 +239,10 @@ def apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx, prelude=""):
         eff_delim = delimiter
 
     # NEW: row-level prefix/suffix (default empty string)
-    prefix = mapping.get("prefix", "")
-    suffix = mapping.get("suffix", "")
+    raw_prefix = mapping.get("prefix", "")
+    raw_suffix = mapping.get("suffix", "")
+    prefix = _substitute_ctx(raw_prefix, ctx)
+    suffix = _substitute_ctx(raw_suffix, ctx)
 
     results = evaluate_src(src_expr, src_obj, ctx, prelude)
     segs = parse_jq_path(dst_path)
