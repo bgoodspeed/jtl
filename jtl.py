@@ -166,6 +166,10 @@ def apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx, prelude=""):
     else:
         eff_delim = delimiter
 
+    # NEW: row-level prefix/suffix (default empty string)
+    prefix = mapping.get("prefix", "")
+    suffix = mapping.get("suffix", "")
+
     results = evaluate_src(src_expr, src_obj, ctx, prelude)
     segs = parse_jq_path(dst_path)
 
@@ -176,11 +180,21 @@ def apply_mapping(src_obj, dst_obj, mapping, delimiter, ctx, prelude=""):
             value = results[0]
         else:
             value = results
+        if isinstance(value, str):
+            value = f"{prefix}{value}{suffix}"
+
         set_path_value(dst_obj, segs, value, mode="replace", delimiter=eff_delim)
         return
 
     # upsert per item (string upserts will use eff_delim)
-    for val in results:
+    for idx, val in enumerate(results):
+        # For the first value: prepend prefix
+        # For the last value: append suffix
+        if isinstance(val, str):
+            if idx == 0:
+                val = prefix + val
+            if idx == len(results) - 1:
+                val = val + suffix
         set_path_value(dst_obj, segs, val, mode="upsert", delimiter=eff_delim)
 
 def run_etl(mappings, src_obj, dst_obj, delimiter, ctx, prelude):

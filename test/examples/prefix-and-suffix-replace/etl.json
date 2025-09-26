@@ -1,0 +1,9 @@
+[
+  {
+    "src": "([ .vals[] ] | join(\", \"))",
+    "dst": ".wrapped",
+    "mode": "replace",
+    "prefix": "<p>",
+    "suffix": "</p>"
+  }
+]

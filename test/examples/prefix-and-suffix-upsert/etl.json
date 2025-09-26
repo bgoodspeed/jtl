@@ -1,0 +1,9 @@
+[
+  {
+    "src": ".vals[]",
+    "dst": ".wrapped",
+    "delimiter": "</li><li>",
+    "prefix": "<ol><li>",
+    "suffix": "</li></ol>"
+  }
+]
